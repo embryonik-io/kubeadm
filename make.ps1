@@ -21,12 +21,12 @@
 #>
 
 param (
-    [CmdletBinding]
-    [parameter()] [string]$Tag,
+    # [CmdletBinding]
+    [parameter()] [string]$Tag
 )
 
 $ErrorActionPreference = 'Stop'
-Set-StrictMode -Version Latest
+# Set-StrictMode -Version Latest
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls12
 
 Import-Module -WarningAction Ignore -Name "$PSScriptRoot\utils.psm1"
@@ -36,7 +36,7 @@ Import-Module -WarningAction Ignore -Name "$PSScriptRoot\utils.psm1"
 #######################################
 
 $Registry = "docker.io"
-$DockerOrg = "embryonik"
+$Org = "embryonik"
 $GithubOrg = "embryonik-io"
 $InputDir = ('C:/{0}/bin' -f $Org)
 
@@ -115,7 +115,7 @@ if (-not $env:GIT_VERSION) {
 
 function Invoke-BinaryBuilder {
 param (
-    [CmdletBinding]
+    # [CmdletBinding]
     [parameter()] [array]$Binaries,
     [parameter()] [array]$OutputDir,
     [parameter()] [string]$Version,
@@ -130,7 +130,7 @@ param (
             Write-Host -ForegroundColor Yellow "Starting binary build of $BINARY v$Version`n"
             Invoke-Script -Path build.ps1 -Org $Org -Version $Version -Binary $BINARY -OutputDir $InputDir -Commit $env:COMMIT
         } catch {    
-            Write-Host -NoNewline -ForegroundColor Red "[Error] while building binary: $BINARY: "
+            Write-Host -NoNewline -ForegroundColor Red "[Error] while building binary: ${BINARY}: "
             Write-Host -ForegroundColor Red "$_`n"
             exit 1
         }
@@ -195,11 +195,11 @@ function Export-Binaries() {
 }
 function Invoke-ImageBuilder() {
     param (
-        [parameter(Mandatory = $true, ValueFromPipeline = $true)] [array]$Images,
-        [parameter(Mandatory = $false, ValueFromPipeline = $true)] [string]$InputDir,
-        [parameter(Mandatory = $true, ValueFromPipeline = $true)] [string]$Version,
-        [parameter(Mandatory = $false, ValueFromPipeline = $true)] [string]$Registry,
-        [parameter(Mandatory = $true, ValueFromPipeline = $true)] [string]$Org
+        [parameter()] [array]$Images,
+        [parameter()] [string]$InputDir,
+        [parameter()] [string]$Version,
+        [parameter()] [string]$Registry,
+        [parameter()] [string]$Org
         
     )
     Invoke-Expression -Command "$PSScriptRoot\version.ps1"
@@ -280,7 +280,7 @@ if ($args[0] -eq "clean") {
     }
 }
 
-if ($Components.Contains($($args[0]))) {
-    Invoke-BinaryBuilder -Org $Org -OutputDir $InputDir -Version $Version -Binaries $args
-    exit
-}
+# if ($Components.Contains($($args[0]))) {
+#     Invoke-BinaryBuilder -Org $Org -OutputDir $InputDir -Version $Version -Binaries $args
+#     exit
+# }
