@@ -108,3 +108,73 @@ https://github.com/kubernetes/kubernetes/blob/master/cmd/kubeadm/app/phases/addo
 # Need to make a multi-platform base build image
 # ex. rosskirkpat/build-base where a manifest is published containing images for
 # windows/amd64, windows/arm64, linux/amd64, and linux/arm64
+
+
+
+
+###################3
+
+# upstream kubernetes cross-compiliation builds for windows 
+
+```shell
+# m1 mac - amd64 
+brew install mingw-w64 bash coreutils
+git clone github.com/kubernetes/kubernetes && cd kubernetes
+git fetch --tags
+git reset --hard HEAD
+git checkout v1.26.1
+
+gsed -i '0,/KUBE_SUPPORTED_SERVER_PLATFORMS/!b;//a\  windows\/amd64' hack/lib/golang.sh
+git add hack/lib/golang.sh
+git commit -m "windows/amd64 server builds"
+KUBE_BUILD_PLATFORMS=windows/amd64 KUBE_FASTBUILD=false make cross
+# _output/local/bin/windows/amd64/*.exe
+
+```console
+# modified KUBE_SUPPORTED_SERVER_PLATFORMS
++++ [0203 13:23:53] Building go targets for windows/amd64
+    k8s.io/kubernetes/cmd/kube-proxy (static)
+    k8s.io/kubernetes/cmd/kube-apiserver (static)
+    k8s.io/kubernetes/cmd/kube-controller-manager (static)
+    k8s.io/kubernetes/cmd/kubelet (non-static)
+    k8s.io/kubernetes/cmd/kubeadm (static)
+    k8s.io/kubernetes/cmd/kube-scheduler (static)
+    k8s.io/component-base/logs/kube-log-runner (static)
+    k8s.io/kube-aggregator (non-static)
+    k8s.io/apiextensions-apiserver (non-static)
+    k8s.io/kubernetes/cluster/gce/gci/mounter (non-static)
+
+# original KUBE_SUPPORTED_SERVER_PLATFORMS
++++ [0203 13:21:37] Building go targets for windows/amd64
+    k8s.io/kubernetes/cmd/kube-proxy (static)
+    k8s.io/kubernetes/cmd/kubeadm (static)
+    k8s.io/kubernetes/cmd/kubelet (non-static)
+    k8s.io/component-base/logs/kube-log-runner (static)
+```
+
+```shell
+# m1 mac - arm64
+git clone github.com/kubernetes/kubernetes && cd kubernetes
+git fetch --tags
+git reset --hard HEAD
+git checkout v1.26.1
+gsed -i '0,/KUBE_SUPPORTED_SERVER_PLATFORMS/!b;//a\  windows\/arm64' hack/lib/golang.sh
+git add hack/lib/golang.sh
+git commit -m "windows/arm64 server builds"
+KUBE_BUILD_PLATFORMS=windows/arm64 KUBE_FASTBUILD=false make cross
+# _output/local/bin/windows/arm64/*.exe
+```
+
+```console
++++ [0203 13:30:09] Building go targets for windows/arm64
+    k8s.io/kubernetes/cmd/kube-proxy (static)
+    k8s.io/kubernetes/cmd/kube-apiserver (static)
+    k8s.io/kubernetes/cmd/kube-controller-manager (static)
+    k8s.io/kubernetes/cmd/kubelet (non-static)
+    k8s.io/kubernetes/cmd/kubeadm (static)
+    k8s.io/kubernetes/cmd/kube-scheduler (static)
+    k8s.io/component-base/logs/kube-log-runner (static)
+    k8s.io/kube-aggregator (non-static)
+    k8s.io/apiextensions-apiserver (non-static)
+    k8s.io/kubernetes/cluster/gce/gci/mounter (non-static)
+```

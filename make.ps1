@@ -31,6 +31,13 @@ $ErrorActionPreference = 'Stop'
 
 Import-Module -WarningAction Ignore -Name "$PSScriptRoot\utils.psm1"
 
+# --- bail if we are not administrator ---
+$adminRole = [Security.Principal.WindowsBuiltInRole]::Administrator
+$currentRole = [Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
+if (-NOT $currentRole.IsInRole($adminRole)) {
+    Write-FatalLog "You need to be administrator to perform this build"
+}
+    
 #######################################
 ### COMMON
 #######################################
@@ -45,7 +52,7 @@ $InputDir = ('C:/{0}/bin' -f $Org)
 #######################################
 
 $Images = @("kubelet", "kube-apiserver", "kube-scheduler", "kube-controller-manager", "kube-proxy", "etcd")
-$Binaries = @("kubelet", "kube-apiserver", "kube-scheduler", "kube-controller-manager", "kube-proxy", "etcd")
+$Binaries = @("kubelet", "kube-apiserver", "kube-scheduler", "kube-controller-manager", "kube-proxy", "kubeadm", "etcd")
 $Components = @("kubelet", "kube-apiserver", "kube-scheduler", "kube-controller-manager", "kube-proxy", "etcd", "etcdctl", "etcdutl")
 
 #######################################
@@ -61,7 +68,7 @@ $COREDNS_VERSION="1.10.1"
 $BUILDKIT_VERSION="0.11.2"
 $NERDCTL_VERSION="1.2.0"
 $GOLANG_VERSION="1.19.5"
-$HELM_VERSION="3.11.1"
+$HELM_VERSION="3.11.0"
 $GIT_VERSION="2.39.1"
 
 if (-not $Tag) {
@@ -113,33 +120,43 @@ if (-not $env:GIT_VERSION) {
     $env:GIT_VERSION=$GIT_VERSION
 }
 
+
+$SRC_PATH = (Resolve-Path "$PSScriptRoot").Path
+Push-Location $SRC_PATH
+
+# $SRC_DIR=$(Get-Location).Path
+Invoke-Expression -Command "$PSScriptRoot\version.ps1"
+
 function Invoke-BinaryBuilder {
-param (
-    # [CmdletBinding]
-    [parameter()] [array]$Binaries,
-    [parameter()] [array]$OutputDir,
-    [parameter()] [string]$Version,
-    [parameter()] [string]$Org
-)
-    Invoke-Expression -Command "$PSScriptRoot\version.ps1"
+    param (
+        # [CmdletBinding]
+        [parameter()] [array]$Binaries,
+        [parameter()] [array]$OutputDir,
+        [parameter()] [string]$Version,
+        [parameter()] [string]$Org
+    )
+    # Invoke-Expression -Command "$PSScriptRoot\version.ps1"
     Write-Host "List of binaries to build ($Binaries)"
     Write-Host "App Version: $env:TAG"
 
-    foreach ($BINARY in $Binaries) {
+    # foreach ($BINARY in $Binaries) {
         try {
-            Write-Host -ForegroundColor Yellow "Starting binary build of $BINARY v$Version`n"
-            Invoke-Script -Path build.ps1 -Org $Org -Version $Version -Binary $BINARY -OutputDir $InputDir -Commit $env:COMMIT
+            Write-Host -ForegroundColor Yellow "Starting binary build of $BINARY $Version`n"
+            # -Org $Org
+            Push-Location -Path $SRC_PATH
+            .\build.ps1 -Version $Version -Binary $BINARY -OutputDir $InputDir -Commit $env:COMMIT
         } catch {    
             Write-Host -NoNewline -ForegroundColor Red "[Error] while building binary: ${BINARY}: "
             Write-Host -ForegroundColor Red "$_`n"
+            Pop-Location
             exit 1
-        }
-        Write-Host -ForegroundColor Green "Successfully built binary: $BINARY v$Version`n"
+        # }
+        Write-Host -ForegroundColor Green "Successfully built binary: $BINARY $Version`n"
     }
 }
 
 # TODO add calico support
-function Export-Binaries() {
+function Export-Binaries {
     param (
         [parameter()] [array]$Components,
         [parameter()] [string]$OutDir,
@@ -159,7 +176,7 @@ function Export-Binaries() {
 
     # package flannel
     if ($Cni.Equals("flannel")) {
-        curl.exe -LO https://github.com/flannel-io/flannel/releases/download/v$env:FLANNEL_VERSION/flanneld.exe
+        curl.exe -LO https://github.com/flannel-io/flannel/releases/download/v${env:FLANNEL_VERSION}/flanneld.exe
         Copy-Item flanneld.exe $OutDir\
         Write-Host -ForegroundColor Green "staged flanneld binary"
         $Components += "flanneld"
@@ -171,12 +188,6 @@ function Export-Binaries() {
         exit 1
     }
 
-    # package coredns
-    curl.exe -LO https://github.com/coredns/coredns/releases/download/v$env:COREDNS_VERSION/coredns_$env:COREDNS_VERSION_windows_amd64.tgz
-    tar xz coredns_$env:COREDNS_VERSION_windows_amd64.tgz
-    Copy-Item coredns.exe $OutDir\
-    Write-Host -ForegroundColor Green "staged coredns binary"
-
     # TODO add sanitizer for $Cni input and append to $ASSETS
     Write-Host -ForegroundColor Yellow "checking for build artifacts [$Components] in $OutDir"
     foreach ($item in $Components) {
@@ -187,13 +198,13 @@ function Export-Binaries() {
     # if ($item.Contains('\')) {
     #     Write-Host "binary is " ($item -replace "^.*?\\")
     # }
+    }
     
     Write-Host -ForegroundColor Green "all required build artifacts are present"
     Write-Host -ForegroundColor Green "artifacts have been successfully staged in: $OutDir"
 }
 
-}
-function Invoke-ImageBuilder() {
+function Invoke-ImageBuilder {
     param (
         [parameter()] [array]$Images,
         [parameter()] [string]$InputDir,
@@ -208,12 +219,12 @@ function Invoke-ImageBuilder() {
 
     foreach ($IMAGE in $Images) {
         try {
-            if ($IMAGE == "etcd") {
-                $etcd = "etcd."
+            if ($IMAGE -eq "etcd") {
+                $etcd="etcd."
             }
 
             $IMAGE = ('{0}/{1}:{2}-windows-{3}' -f $DockerOrg, $IMAGE, $env:TAG, $env:SERVERCORE_VERSION)
-            Write-Host -ForegroundColor Yellow "Starting nerdctl build of $IMAGE`n"
+            Write-Host -ForegroundColor Yellow "Starting nerdctl build of ${IMAGE}`n"
 
             nerdctl build `
             --build-arg SERVERCORE_VERSION=$env:SERVERCORE_VERSION `
@@ -226,12 +237,11 @@ function Invoke-ImageBuilder() {
             -f ('{0}Dockerfile' -f $etcd) .
         
         } catch {    
-            Write-Host -NoNewline -ForegroundColor Red "[Error] while building image: $IMAGE\: "
+            Write-Host -NoNewline -ForegroundColor Red "[Error] while building image: ${IMAGE}: "
             Write-Host -ForegroundColor Red "$_`n"
-            $etcd=""
             exit 1
         }
-        Write-Host -ForegroundColor Green "Successfully built $IMAGE`n"
+        Write-Host -ForegroundColor Green "Successfully built ${IMAGE}`n"
     }
 }
 
@@ -241,9 +251,9 @@ function Publish-Images {
 
 if ($args[0] -eq "build" -or $args.Count -eq 0) {
     Write-Host "building all image and binary artifacts"
-    Invoke-BinaryBuilder -Org $Org -OutputDir $InputDir -Version $Version -Binaries $Binaries
-    Export-Binaries -Components $Components -OutDir $InputDir
-    Invoke-ImageBuilder -Images $Images -InputDir $InputDir -Registry $Registry -Org $Org -Version $Version
+    Invoke-BinaryBuilder -Org $Org -OutputDir $InputDir -Version $Tag -Binaries $Binaries
+    # Export-Binaries -Components $Components -OutDir $InputDir
+    # Invoke-ImageBuilder -Images $Images -InputDir $InputDir -Registry $Registry -Org $Org -Version $Tag
 }
 
 if ($args[0] -eq "binaries") {

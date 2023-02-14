@@ -32,11 +32,11 @@ function Invoke-Script {
     try {
         Invoke-Expression -Command $File
         if (-not $?) {
-            Log-Fatal "Failed to invoke $File"
+            Write-LogFatal "Failed to invoke $File"
         }
     }
     catch {
-        Log-Fatal "Could not invoke $File, $($_.Exception.Message)"
+        Write-LogFatal "Could not invoke $File, $($_.Exception.Message)"
     }
 }
 

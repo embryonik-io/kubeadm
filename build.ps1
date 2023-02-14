@@ -1,54 +1,59 @@
 #Requires -Version 5.0
 
 param (
-    [parameter(Mandatory = $true, ValueFromPipeline = $true)] [string]$Version,
-    [parameter(Mandatory = $true, ValueFromPipeline = $true)] [string]$Commit,
-    [parameter(Mandatory = $true, ValueFromPipeline = $true)] [string]$OutputDir,
-    [parameter(Mandatory = $true, ValueFromPipeline = $true)] [string]$Org,
-    [parameter(Mandatory = $true, ValueFromPipeline = $true)] [string]$Binary
+    [CmdletBinding()]
+    [parameter()] [string]$Version,
+    [parameter()] [string]$Commit,
+    [parameter()] [string]$OutputDir,
+    # [parameter()] [string]$Org,
+    [parameter()] [string]$Binary
 )
 
 $ErrorActionPreference = 'Stop'
 Import-Module -WarningAction Ignore -Name "$PSScriptRoot\utils.psm1"
-Invoke-Script -File "$PSScriptRoot\version.ps1"
+Invoke-Expression -Command "$PSScriptRoot\version.ps1"
 $null = New-Item -Type Directory -Path $OutputDir -ErrorAction Ignore
 $env:GOARCH = $env:ARCH
 $env:GOOS = 'windows'
 $env:CGO_ENABLED = 0
 $repo = 'k8s.io/kubernetes'
 
-function Invoke-BinaryBuild() {
+function Invoke-BinaryBuild {
     param (
-        [CmdletBinding]
         [parameter()] [string]$Invocation,
         [parameter()] [string]$LinkFlags,
         [parameter()] [string]$Name
     )
 
     if (-Not (Get-Command go)) {
-        Log-Fatal "[build] failed to build ($Name.exe), go.exe was not found in PATH"
+        Write-LogFatal "[build] failed to build ($Name.exe), go.exe was not found in PATH"
     }
-    $GO = $(Get-Command go)
+    # $GO = $(Get-Command go)
 
     if ($Name.Contains('kube')) {
         Write-Host "Building $Name.exe [$env:KUBE_VERSION]"
-        Push-Location kubernetes
+        $tmp = ('{0}\{1}' -f ${env:TEMP} , "github.com\kubernetes\kubernetes")
+        # $null = New-Item -Type Directory -Path $tmp -ErrorAction Ignore
+        Push-Location $tmp
     }
    
     if ($Name.Contains('etcd')) {
         Write-Host "Building $Name.exe [$env:ETCD_VERSION]"
-        Push-Location etcd
+        $tmp = ('{0}\{1}' -f ${env:TEMP} , "github.com\etcd-io\etcd")
+        # $null = New-Item -Type Directory -Path $tmp -ErrorAction Ignore
+        Push-Location $tmp    
     }
 
-    if ($Name.Contains('dns')) {
-        Write-Host "Building $Name.exe [$env:COREDNS_VERSION]"
-        Push-Location coredns
-    }
+    # if ($Name.Contains('dns')) {
+    #     Write-Host "Building $Name.exe [$env:COREDNS_VERSION]"
+    #     Push-Location coredns
+    # }
 
-    $ldFlags = ' -extldflags "-static"'
-    $GO build -ldflags $linkFlags$ldFlags -o "$OutputDir\$Name.exe" $Invocation
-    if (-not $?) {
-        Log-Fatal "[build] go build failed for ($Name.exe)"
+    $ldFlags=' -extldflags "-static"'
+    GOPATH=$tmp go build -ldflags $linkFlags$ldFlags -o "$OutputDir\$Name.exe" $Invocation
+    # if (-not $?) {
+    if ($LASTEXITCODE -ne 0) {
+        Write-LogFatal "[build] go build failed for ($Name.exe)"
         Pop-Location
     }
     Write-Host -ForegroundColor Green "($Name.exe) has been built successfully."
@@ -107,4 +112,30 @@ function Invoke-CoreDNSBuild {
     Invoke-BinaryBuild -LinkFlags $linkFlags -Name $name
 }
 
-$(Invoke-$($Binary.Replace('-',''))Build)
+# $newName = $Binary.Replace('-','')
+# ('Invoke-{0}Build' -f $newName)
+# $invoke = $(Invoke-$Binary.Replace('-','')Build)
+# $(Invoke-$Binary.Replace('-','')Build)
+# Invoke-kubeproxyBuild
+# Invoke-$newName
+
+
+function Invoke-Builds {
+    Invoke-Expression -Command "$PSScriptRoot\prepare.ps1"
+
+    try {
+    Invoke-KubeSchedulerBuild
+    Invoke-KubeApiserverBuild
+    Invoke-KubeControllerManagerBuild
+    Invoke-KubeProxyBuild
+    Invoke-KubeadmBuild
+    Invoke-KubeletBuild
+    Invoke-KubectlBuild
+    Invoke-EtcdBuild
+    }
+    catch {
+        Pop-Location
+    }
+}
+
+Invoke-Builds

@@ -30,7 +30,7 @@ if (-not $env:REPO) {
 }
 
 if (($env:BUILD_TAG) -and (-Not ($TAG).Contains("dev") -or -Not ($TAG).Contains("dirty"))){
-    $TAG = $env:DRONE_TAG
+    $TAG = $env:BUILD_TAG
     $env:TAG = $TAG
 } else {
     $env:TAG = $TAG
